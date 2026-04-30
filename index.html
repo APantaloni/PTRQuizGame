@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guess the Episode</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&family=Lexend:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.min.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="card intro-card" id="introCard">
+      <p class="eyebrow">Unofficial Push the Roll / Ain't Slayed Nobody</p>
+      <h1>Guess the Episode</h1>
+      <p class="intro-copy">
+        Four episodes, one correct answer. Clues come from content warnings, character names,
+        and player names.
+      </p>
+      <p class="intro-copy">
+        The less hints you need, the higher your score! Can you get a perfect 100%?
+      </p>
+      <p class="tiny" id="introStatus" aria-live="polite">Choose a difficulty to begin.</p>
+      <fieldset class="difficulty-group">
+        <legend class="sr-only">Difficulty</legend>
+        <div class="difficulty-grid" id="difficultyGrid">
+          <label class="difficulty-btn">
+            <input class="sr-only" type="radio" name="difficulty" value="easy">
+            Easy<br><span>No timer</span>
+          </label>
+          <label class="difficulty-btn">
+            <input class="sr-only" type="radio" name="difficulty" value="medium">
+            Medium<br><span>10s per clue</span>
+          </label>
+          <label class="difficulty-btn">
+            <input class="sr-only" type="radio" name="difficulty" value="hard">
+            Hard<br><span>5s per clue</span>
+          </label>
+        </div>
+      </fieldset>
+      <button class="primary" id="startBtn" disabled>Start 10 Rounds</button>
+      <p class="tiny intro-hint" id="introHint" aria-live="polite">Press <kbd>1</kbd>&ndash;<kbd>3</kbd> to select difficulty</p>
+    </section>
+
+    <section class="card game-card hidden" id="gameCard">
+      <header class="game-header">
+        <div class="game-header-main">
+          <p class="eyebrow" id="roundLabel">Round 1 / 10</p>
+          <h2 id="scoreLabel" aria-live="polite">Score: 0</h2>
+        </div>
+        <div class="game-header-side">
+          <p class="eyebrow" id="difficultyLabel"></p>
+          <div class="timer-wrap">
+            <p class="tiny" id="timerText" aria-live="polite">Timer off</p>
+            <div class="meter" role="progressbar" aria-label="Time remaining"><div id="meterFill"></div></div>
+          </div>
+        </div>
+      </header>
+
+      <section aria-label="Answer options">
+        <h3>Which episode is it?</h3>
+        <div class="answers-grid" id="answersGrid" role="group" aria-label="Answer choices"></div>
+        <p class="tiny intro-hint" id="answerHint">Press <kbd>1</kbd>–<kbd>4</kbd> to answer &middot; <kbd>Space</kbd> to reveal the next clue</p>
+      </section>
+
+      <section class="hints-panel" aria-label="Clues">
+        <h3>Clues</h3>
+        <ol id="hintsList" class="hints-list" aria-live="polite" aria-relevant="additions"></ol>
+        <button class="ghost" id="nextHintBtn">Reveal next clue</button>
+      </section>
+
+      <p class="feedback" id="feedback" aria-live="assertive"></p>
+      <button class="primary hidden" id="nextRoundBtn">Next round</button>
+    </section>
+
+    <section class="card summary-card hidden" id="summaryCard">
+      <p class="eyebrow">Run complete</p>
+      <h2 id="finalScore">Final score: 0</h2>
+      <p id="finalStats"></p>
+      <button class="primary" id="playAgainBtn">Play again</button>
+    </section>
+  </main>
+
+  <script src="app.min.js"></script>
+</body>
+</html>
