@@ -243,8 +243,7 @@ function buildCluePool(episode) {
 
   for (const w of episode.warnings   || []) add("warning",   w, normalizeWarningHint(w));
   for (const c of episode.characters || []) add("character", c, normalizeHint(c));
-  for (const p of episode.players    || []) add("player",    p, normalizeHint(p));
-
+  for (const p of episode.players    || []) add("player",    p, normalizeHint(p));  if (episode.date) add("date", episode.date, normalizeHint(episode.date));
   return pool;
 }
 
@@ -266,6 +265,9 @@ function shuffle(arr) {
 }
 
 function episodeHasClue(episode, clue) {
+  if (clue.type === "date") {
+    return episode.date && normalizeHint(episode.date) === clue.normalized;
+  }
   const source = clue.type === "warning"  ? episode.warnings
                : clue.type === "player"   ? episode.players
                : episode.characters;
@@ -274,22 +276,27 @@ function episodeHasClue(episode, clue) {
 }
 
 function clueFrequency(clue, frequencies) {
-  const bucket = clue.type === "warning" ? "warnings" : clue.type === "player" ? "players" : "characters";
+  const bucket = clue.type === "warning" ? "warnings" : clue.type === "player" ? "players" : clue.type === "date" ? "dates" : "characters";
   const bucketFrequencies = frequencies[bucket];
-  return bucketFrequencies && bucketFrequencies[clue.normalized] != null
+  let freq = bucketFrequencies && bucketFrequencies[clue.normalized] != null
     ? bucketFrequencies[clue.normalized]
     : 9999;
+  // Deprioritize dates to give them lower priority overall
+  if (clue.type === "date") freq *= 2;
+  return freq;
 }
 
 function computeClueFrequencies(episodes) {
-  const freq = { warnings: {}, characters: {}, players: {} };
+  const freq = { warnings: {}, characters: {}, players: {}, dates: {} };
   for (const ep of episodes || []) {
     const ws = new Set((ep.warnings   || []).map(normalizeWarningHint).filter(Boolean));
     const cs = new Set((ep.characters || []).map(normalizeHint).filter(Boolean));
     const ps = new Set((ep.players    || []).map(normalizeHint).filter(Boolean));
+    const ds = ep.date ? new Set([normalizeHint(ep.date)]) : new Set();
     for (const k of ws) freq.warnings[k]   = (freq.warnings[k]   || 0) + 1;
     for (const k of cs) freq.characters[k] = (freq.characters[k] || 0) + 1;
     for (const k of ps) freq.players[k]    = (freq.players[k]    || 0) + 1;
+    for (const k of ds) freq.dates[k]      = (freq.dates[k]      || 0) + 1;
   }
   return freq;
 }
@@ -325,7 +332,7 @@ function pickRound(episodePool, playedIds, frequencies, difficulty) {
     // First clue must narrow down to the correct answer alone.
     const byFreq = (a, b) => clueFrequency(a, frequencies) - clueFrequency(b, frequencies);
     const uniqueFirst = cluePool
-      .filter(c => wrongOptions.every(ep => !episodeHasClue(ep, c)))
+      .filter(c => c.type !== "date" && wrongOptions.every(ep => !episodeHasClue(ep, c)))
       .sort(byFreq);
 
     if (!uniqueFirst.length) continue;
@@ -394,6 +401,7 @@ const CLUE_TYPE_LABELS = {
   player:    "Player",
   character: "Character",
   logline:   "Logline",
+  date:      "Air date",
 };
 
 function isManualClueRevealAllowed() {
