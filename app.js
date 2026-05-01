@@ -783,7 +783,7 @@ async function submitScore() {
     playerName: game.playerName.substring(0, 20),
     score: game.score,
     difficulty: Object.keys(DIFFICULTIES).find(k => DIFFICULTIES[k] === game.difficulty) || "easy",
-    date: new Date().toISOString().split('T')[0],
+    date: new Date().toISOString(),
   };
   
   try {
