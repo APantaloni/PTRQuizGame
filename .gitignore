@@ -1,7 +1,1 @@
-*
-!.gitignore
-!README.md
-!index.html
-!app.min.js
-!styles.min.css
-!quiz_data.json
+build_quiz_data.py
