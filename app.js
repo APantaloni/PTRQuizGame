@@ -399,7 +399,10 @@ const dom = {
   introCard:      document.getElementById("introCard"),
   gameCard:       document.getElementById("gameCard"),
   summaryCard:    document.getElementById("summaryCard"),
-  sourceSelector: document.getElementById("sourceSelector"),
+  sourceGrid:     document.getElementById("sourceGrid"),
+  sourceCountAll: document.getElementById("sourceCountAll"),
+  sourceCountCastData: document.getElementById("sourceCountCastData"),
+  sourceCountCastDataPTR: document.getElementById("sourceCountCastDataPTR"),
   difficultyGrid: document.getElementById("difficultyGrid"),
   startBtn:       document.getElementById("startBtn"),
   introStatus:    document.getElementById("introStatus"),
@@ -626,9 +629,20 @@ function getCurrentSourceConfig() {
   return SOURCES[game.sourceKey] || SOURCES.all;
 }
 
-function refreshIntroStatus() {
-  const sourceLabel = getCurrentSourceConfig().label;
-  dom.introStatus.textContent = `${game.episodes.length} episodes loaded (${sourceLabel}). Choose a difficulty to begin.`;
+function formatEntriesLabel(count) {
+  return `${count} ${count === 1 ? "entry" : "entries"}`;
+}
+
+function updateSourceButtonCounts(allEpisodes) {
+  const counts = {
+    all: allEpisodes.length,
+    castData: allEpisodes.filter(ep => ep.source === SOURCES.castData.filter).length,
+    castDataPTR: allEpisodes.filter(ep => ep.source === SOURCES.castDataPTR.filter).length,
+  };
+
+  if (dom.sourceCountAll) dom.sourceCountAll.textContent = formatEntriesLabel(counts.all);
+  if (dom.sourceCountCastData) dom.sourceCountCastData.textContent = formatEntriesLabel(counts.castData);
+  if (dom.sourceCountCastDataPTR) dom.sourceCountCastDataPTR.textContent = formatEntriesLabel(counts.castDataPTR);
 }
 
 async function reloadEpisodesForSource() {
@@ -636,10 +650,13 @@ async function reloadEpisodesForSource() {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
   const data = await res.json();
+  const allEpisodes = data.episodes || [];
+  updateSourceButtonCounts(allEpisodes);
+
   const sourceConfig = getCurrentSourceConfig();
   EPISODE_FILTER_SOURCES = sourceConfig.filter ? [sourceConfig.filter] : null;
 
-  game.episodes = data.episodes || [];
+  game.episodes = allEpisodes;
   if (EPISODE_FILTER_SOURCES) {
     game.episodes = game.episodes.filter(ep => EPISODE_FILTER_SOURCES.includes(ep.source));
   }
@@ -667,11 +684,17 @@ async function refreshLeaderboardsForSource() {
 async function applySourceSelection(sourceKey) {
   game.sourceKey = SOURCES[sourceKey] ? sourceKey : "all";
   saveStoredSourceKey(game.sourceKey);
-  if (dom.sourceSelector) dom.sourceSelector.value = game.sourceKey;
+  if (dom.sourceGrid) {
+    for (const radio of dom.sourceGrid.querySelectorAll('input[type="radio"]')) {
+      radio.checked = radio.value === game.sourceKey;
+    }
+    for (const label of dom.sourceGrid.querySelectorAll(".source-btn")) {
+      label.classList.toggle("active", label.querySelector("input") && label.querySelector("input").value === game.sourceKey);
+    }
+  }
 
   clearDifficultySelection();
   await reloadEpisodesForSource();
-  refreshIntroStatus();
   await refreshLeaderboardsForSource();
 }
 
@@ -976,7 +999,7 @@ function clearDifficultySelection() {
     label.classList.remove("active");
   }
   dom.startBtn.disabled = true;
-  if (dom.introHint) dom.introHint.innerHTML = "Press <kbd>1</kbd>&ndash;<kbd>3</kbd> to select difficulty";
+  if (dom.introHint) dom.introHint.innerHTML = "Press <kbd>F1</kbd>&ndash;<kbd>F3</kbd> to select pool &middot; <kbd>1</kbd>&ndash;<kbd>3</kbd> to select difficulty";
 }
 
 function selectDifficulty(radio) {
@@ -988,7 +1011,7 @@ function selectDifficulty(radio) {
   game.difficultyKey = radio.value;
   game.difficulty = DIFFICULTIES[radio.value];
   dom.startBtn.disabled = false;
-  if (dom.introHint) dom.introHint.innerHTML = "Press <kbd>Space</kbd> to begin &middot; <kbd>1</kbd>&ndash;<kbd>3</kbd> to change difficulty";
+  if (dom.introHint) dom.introHint.innerHTML = "Press <kbd>Space</kbd> to begin &middot; <kbd>F1</kbd>&ndash;<kbd>F3</kbd> pool &middot; <kbd>1</kbd>&ndash;<kbd>3</kbd> difficulty";
 }
 
 function startGame() {
@@ -1008,6 +1031,19 @@ function startGame() {
 
 document.addEventListener("keydown", (e) => {
   if (game.phase === PHASE.INTRO) {
+    const sourceKeys = ["f1", "f2", "f3"];
+    const sourceValues = ["all", "castData", "castDataPTR"];
+    const key = String(e.key || "").toLowerCase();
+    const si = sourceKeys.indexOf(key);
+    if (si !== -1) {
+      e.preventDefault();
+      applySourceSelection(sourceValues[si]).catch((err) => {
+        console.error("Error applying source selection:", err);
+        dom.introStatus.textContent = `Couldn't load episode data: ${err.message}`;
+      });
+      return;
+    }
+
     const diffKeys = ["1", "2", "3"];
     const diffValues = ["easy", "medium", "hard"];
     const di = diffKeys.indexOf(e.key);
@@ -1043,8 +1079,22 @@ document.addEventListener("keydown", (e) => {
 });
 
 function wireEvents() {
-  if (dom.sourceSelector) {
-    dom.sourceSelector.addEventListener("change", async (e) => {
+  if (dom.sourceGrid) {
+    dom.sourceGrid.addEventListener("click", async (e) => {
+      const label = e.target.closest(".source-btn");
+      if (!label) return;
+      const radio = label.querySelector('input[type="radio"]');
+      if (!radio) return;
+      radio.checked = true;
+      try {
+        await applySourceSelection(radio.value || "all");
+      } catch (err) {
+        console.error("Error applying source selection:", err);
+        dom.introStatus.textContent = `Couldn't load episode data: ${err.message}`;
+      }
+    });
+
+    dom.sourceGrid.addEventListener("change", async (e) => {
       const nextSource = e.target && e.target.value ? e.target.value : "all";
       try {
         await applySourceSelection(nextSource);

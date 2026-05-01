@@ -20,17 +20,29 @@
         player names and loglines.
       </p>
       <p class="intro-copy">
-        The less hints you need, the higher your score! Can you get a perfect 100%?
+        The less hints you need, the higher your score! Can you get a perfect 100%? 
       </p>
-      <div class="source-section">
-        <label for="sourceSelector">Episodes pool</label>
-        <select id="sourceSelector" aria-label="Episodes pool selector">
-          <option value="all">All shows</option>
-          <option value="castData">Ain't Slayed Nobody</option>
-          <option value="castDataPTR">Push the Roll with Ross Bryant</option>
-        </select>
-      </div>
-      <p class="tiny" id="introStatus" aria-live="polite">Choose a difficulty to begin.</p>
+      <p>
+        Choose your knowledge pool:
+      </p>
+      <fieldset class="source-group">
+        <legend class="sr-only">Episodes pool</legend>
+        <div class="source-grid" id="sourceGrid" aria-label="Episodes pool selector">
+          <label class="source-btn">
+            <input class="sr-only" type="radio" name="source" value="all">
+            All the shows<br><span id="sourceCountAll">- entries</span>
+          </label>
+          <label class="source-btn">
+            <input class="sr-only" type="radio" name="source" value="castData">
+            Ain't Slayed Nobody<br><span id="sourceCountCastData">- entries</span>
+          </label>
+          <label class="source-btn">
+            <input class="sr-only" type="radio" name="source" value="castDataPTR">
+            Push the Roll with Ross Bryant<br><span id="sourceCountCastDataPTR">- entries</span>
+          </label>
+        </div>
+      </fieldset>
+      <p class="tiny" id="introStatus" aria-live="polite">Then choose a difficulty and you're ready to begin:</p>
       <fieldset class="difficulty-group">
         <legend class="sr-only">Difficulty</legend>
         <div class="difficulty-grid" id="difficultyGrid">
@@ -55,7 +67,7 @@
       </div>
 
       <button class="primary" id="startBtn" disabled>Start 10 Rounds</button>
-      <p class="tiny intro-hint" id="introHint" aria-live="polite">Press <kbd>1</kbd>&ndash;<kbd>3</kbd> to select difficulty</p>
+      <p class="tiny intro-hint" id="introHint" aria-live="polite">Press <kbd>F1</kbd>&ndash;<kbd>F3</kbd> to select pool &middot; <kbd>1</kbd>&ndash;<kbd>3</kbd> to select difficulty</p>
 
       <div class="leaderboards">
         <h2>Leaderboards</h2>
