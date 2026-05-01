@@ -609,7 +609,7 @@ function buildLeaderboardUrlForDifficulty(difficulty) {
   const params = new URLSearchParams();
   params.set("select", "id,playerName,score,difficulty,source,date");
   params.set("difficulty", `eq.${difficulty}`);
-  if (game.sourceKey !== "all") params.set("source", `eq.${game.sourceKey}`);
+  params.set("source", `eq.${game.sourceKey}`);
   params.set("order", "score.desc,date.asc");
   params.set("limit", "10");
   return `${getSupabaseBaseUrl()}?${params.toString()}`;
