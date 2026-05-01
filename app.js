@@ -494,10 +494,13 @@ function renderAnswerHint() {
 }
 
 function renderSummary() {
+  const maxScore = ROUNDS_PER_GAME * CLUES_PER_ROUND;
+  const percentage = maxScore > 0 ? Math.round((game.score / maxScore) * 100) : 0;
+
   dom.gameCard.classList.add("hidden");
   dom.summaryCard.classList.remove("hidden");
-  dom.finalScore.textContent = `Final score: ${game.score}`;
-  dom.finalStats.textContent = `${game.roundIndex} rounds played. Max possible: ${ROUNDS_PER_GAME * CLUES_PER_ROUND}.`;
+  dom.finalScore.textContent = `Final score: ${game.score} (${percentage}%)`;
+  dom.finalStats.textContent = `${game.roundIndex} rounds played. Max possible: ${maxScore}.`;
 }
 
 function stopTimers() {
