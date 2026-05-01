@@ -1,13 +1,13 @@
 {
   "meta": {
-    "generatedAt": "2026-05-01T09:46:09.519808Z",
+    "generatedAt": "2026-05-01T11:45:17.939654Z",
     "project": "pushtheroll_fandom_wiki",
     "sourceDirs": [
       "Modules/CastData",
       "Modules/CastDataPTR"
     ],
     "fileCount": 89,
-    "episodeCount": 225,
+    "episodeCount": 226,
     "notes": "Hints include content warnings, character names, and player names."
   },
   "episodes": [
@@ -2577,6 +2577,37 @@
       "episode": "Lone Canyon Episode 3",
       "date": "Feb 27, 2026",
       "logline": "CeCe gets answers from Nathan and somehow leaves with even more questions. Ezra receives instructions from Sam that are way worse than his gummies. And Dana discovers that friendship advice from Ezra might not be the best strategy. Meanwhile, TJ is about to find himself in deep trouble.",
+      "warnings": [
+        "harm to children",
+        "self-harm involving children",
+        "drug use",
+        "body horror",
+        "sexual themes",
+        "violence",
+        "profanity"
+      ],
+      "characters": [
+        "Dana",
+        "Cece",
+        "Eli",
+        "Ezra"
+      ],
+      "players": [
+        "Scott Dorward",
+        "Kat Edmonds",
+        "Mary Lou",
+        "Chuck Lawrence",
+        "Cuppycup"
+      ]
+    },
+    {
+      "id": "CastData:Lone Canyon:Lone Canyon Episode 4",
+      "source": "CastData",
+      "sourceFile": "Modules/CastData/Lone Canyon.lua",
+      "show": "Lone Canyon",
+      "episode": "Lone Canyon Episode 4",
+      "date": "May 1, 2026",
+      "logline": "CeCe decides to follow a lead and gets way closer to the truth than she probably should. Ezra tries to hold things together while everything around him gets worse, and Dana’s plans for friendship are getting complicated.",
       "warnings": [
         "harm to children",
         "self-harm involving children",
