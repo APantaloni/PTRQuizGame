@@ -548,16 +548,13 @@ function renderSummary() {
 }
 
 function getDisplayLeaderboardRows(scores) {
-  return Array.from({ length: 5 }, (_, i) => {
+  return Array.from({ length: 10 }, (_, i) => {
     const row = scores[i];
-    return row
-      ? {
-          id: row._id || null,
-          playerName: String(row.playerName || "---").slice(0, 20),
-          score: Number.isFinite(Number(row.score)) ? Number(row.score) : 0,
-          isPlaceholder: false,
-        }
-      : { id: null, playerName: "---", score: 0, isPlaceholder: true };
+    if (!row) return { id: null, playerName: "---", score: 0, rank: i + 1, isPlaceholder: true };
+    const score = Number.isFinite(Number(row.score)) ? Number(row.score) : 0;
+    // Standard competition ranking: rank = 1 + count of entries with strictly higher score
+    const rank = scores.filter(r => Number(r.score) > score).length + 1;
+    return { id: row._id || null, playerName: String(row.playerName || "---").slice(0, 20), score, rank, isPlaceholder: false };
   });
 }
 
@@ -589,6 +586,10 @@ function renderSummaryDifficultyLeaderboard(newEntryId = null) {
     const li = document.createElement("li");
     if (score.isPlaceholder) li.classList.add("placeholder");
 
+    const rank = document.createElement("span");
+    rank.className = "leaderboard-rank";
+    rank.textContent = `${score.rank}.`;
+
     const name = document.createElement("span");
     name.className = "leaderboard-name";
     name.textContent = score.playerName;
@@ -597,7 +598,7 @@ function renderSummaryDifficultyLeaderboard(newEntryId = null) {
     points.className = "leaderboard-score";
     points.textContent = String(score.score);
 
-    li.append(name, points);
+    li.append(rank, name, points);
     list.appendChild(li);
   });
   dom.summaryLeaderboard.appendChild(list);
@@ -819,7 +820,7 @@ async function loadLeaderboards() {
       const scores = records
         .filter(r => r.difficulty === difficulty)
         .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
+        .slice(0, 10);
       game.leaderboards[difficulty] = scores;
     }
   } catch (err) {
@@ -846,6 +847,10 @@ function renderLeaderboards() {
       const li = document.createElement("li");
       if (score.isPlaceholder) li.classList.add("placeholder");
 
+      const rank = document.createElement("span");
+      rank.className = "leaderboard-rank";
+      rank.textContent = `${score.rank}.`;
+
       const name = document.createElement("span");
       name.className = "leaderboard-name";
       name.textContent = score.playerName;
@@ -854,7 +859,7 @@ function renderLeaderboards() {
       points.className = "leaderboard-score";
       points.textContent = String(score.score);
 
-      li.append(name, points);
+      li.append(rank, name, points);
       list.appendChild(li);
     });
     container.appendChild(list);
