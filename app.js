@@ -8,6 +8,14 @@ const ROUNDS_PER_GAME = 10;
 const CLUES_PER_ROUND = 4;
 const ROUND_COUNTDOWN_SECONDS = 4;
 
+// RestDB.io configuration
+const RESTDB_CONFIG = {
+  apiKey: "69f4776eb4b48c33a8b6a4e9",
+  dbUrl: "https://ptrquizgame-90eb.restdb.io/rest/scores",
+};
+
+const PLAYER_NAME_STORAGE_KEY = "ptrquizgame.playerName";
+
 // Cap retries so round generation never loops forever on sparse datasets.
 const ROUND_BUILD_ATTEMPTS = 900;
 
@@ -361,6 +369,7 @@ const game = {
   episodes:        [],
   clueFrequencies: { warnings: {}, characters: {}, players: {} },
   difficulty:      null,
+  difficultyKey:   null,
   score:           0,
   roundIndex:      0,
   playedIds:       new Set(),
@@ -370,6 +379,8 @@ const game = {
   meterTimer:      null,
   countdownTimer:  null,
   remainingMs:     0,
+  playerName:      "",
+  leaderboards:    { easy: [], medium: [], hard: [] },
 };
 
 const dom = {
@@ -380,6 +391,12 @@ const dom = {
   startBtn:       document.getElementById("startBtn"),
   introStatus:    document.getElementById("introStatus"),
   introHint:      document.getElementById("introHint"),
+    playerNameInput: document.getElementById("playerNameInput"),
+    leaderboardsStatus: document.getElementById("leaderboardsStatus"),
+    leaderboardsGrid: document.getElementById("leaderboardsGrid"),
+    leaderboardEasy: document.getElementById("leaderboardEasy"),
+    leaderboardMedium: document.getElementById("leaderboardMedium"),
+    leaderboardHard: document.getElementById("leaderboardHard"),
   roundLabel:     document.getElementById("roundLabel"),
   scoreLabel:     document.getElementById("scoreLabel"),
   timerText:      document.getElementById("timerText"),
@@ -393,6 +410,8 @@ const dom = {
   nextRoundBtn:   document.getElementById("nextRoundBtn"),
   finalScore:     document.getElementById("finalScore"),
   finalStats:     document.getElementById("finalStats"),
+  summaryLeaderboard: document.getElementById("summaryLeaderboard"),
+  summaryCongrats: document.getElementById("summaryCongrats"),
   playAgainBtn:   document.getElementById("playAgainBtn"),
 };
 
@@ -403,6 +422,22 @@ const CLUE_TYPE_LABELS = {
   logline:   "Logline",
   date:      "Air date",
 };
+
+function loadStoredPlayerName() {
+  try {
+    return String(localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || "").slice(0, 20);
+  } catch {
+    return "";
+  }
+}
+
+function saveStoredPlayerName(name) {
+  try {
+    localStorage.setItem(PLAYER_NAME_STORAGE_KEY, String(name || "").slice(0, 20));
+  } catch {
+    // Ignore storage failures (private mode/quota/etc.) and continue normally.
+  }
+}
 
 function isManualClueRevealAllowed() {
   return !(game.round && game.round.difficulty && game.round.difficulty.hintIntervalMs);
@@ -509,6 +544,69 @@ function renderSummary() {
   dom.summaryCard.classList.remove("hidden");
   dom.finalScore.textContent = `Final score: ${game.score} (${percentage}%)`;
   dom.finalStats.textContent = `${game.roundIndex} rounds played. Max possible: ${maxScore}.`;
+  renderSummaryDifficultyLeaderboard();
+}
+
+function getDisplayLeaderboardRows(scores) {
+  return Array.from({ length: 5 }, (_, i) => {
+    const row = scores[i];
+    return row
+      ? {
+          id: row._id || null,
+          playerName: String(row.playerName || "---").slice(0, 20),
+          score: Number.isFinite(Number(row.score)) ? Number(row.score) : 0,
+          isPlaceholder: false,
+        }
+      : { id: null, playerName: "---", score: 0, isPlaceholder: true };
+  });
+}
+
+function setSummaryLeaderboardStatus(message) {
+  if (!dom.summaryLeaderboard) return;
+  dom.summaryLeaderboard.innerHTML = "";
+  const p = document.createElement("p");
+  p.className = "leaderboard-status";
+  p.textContent = message;
+  dom.summaryLeaderboard.appendChild(p);
+  if (dom.summaryCongrats) dom.summaryCongrats.textContent = "";
+}
+
+function renderSummaryDifficultyLeaderboard(newEntryId = null) {
+  if (!dom.summaryLeaderboard || !game.difficultyKey) return;
+
+  const difficultyKey = game.difficultyKey;
+  const scores = game.leaderboards[difficultyKey] || [];
+  const displayRows = getDisplayLeaderboardRows(scores);
+
+  dom.summaryLeaderboard.innerHTML = "";
+
+  const title = document.createElement("h3");
+  title.textContent = `${DIFFICULTIES[difficultyKey].label} leaderboard`;
+  dom.summaryLeaderboard.appendChild(title);
+
+  const list = document.createElement("ol");
+  displayRows.forEach((score) => {
+    const li = document.createElement("li");
+    if (score.isPlaceholder) li.classList.add("placeholder");
+
+    const name = document.createElement("span");
+    name.className = "leaderboard-name";
+    name.textContent = score.playerName;
+
+    const points = document.createElement("span");
+    points.className = "leaderboard-score";
+    points.textContent = String(score.score);
+
+    li.append(name, points);
+    list.appendChild(li);
+  });
+  dom.summaryLeaderboard.appendChild(list);
+
+  if (!dom.summaryCongrats) return;
+  const madeLeaderboard = Boolean(newEntryId) && scores.some((entry) => entry && entry._id === newEntryId);
+  dom.summaryCongrats.textContent = madeLeaderboard
+    ? "Congratulations! Your new score made the leaderboard!"
+    : "";
 }
 
 function stopTimers() {
@@ -672,6 +770,99 @@ function endGame(note = "") {
   game.phase = PHASE.SUMMARY;
   renderSummary();
   if (note) dom.finalStats.textContent += ` ${note}`;
+  submitScore();
+}
+
+async function submitScore() {
+  if (!game.playerName || game.playerName.length === 0) return;
+
+  setSummaryLeaderboardStatus("Summoning Yog-Sothoth, please wait…");
+
+  const payload = {
+    playerName: game.playerName.substring(0, 20),
+    score: game.score,
+    difficulty: Object.keys(DIFFICULTIES).find(k => DIFFICULTIES[k] === game.difficulty) || "easy",
+    date: new Date().toISOString().split('T')[0],
+  };
+  
+  try {
+    const response = await fetch(RESTDB_CONFIG.dbUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-apikey": RESTDB_CONFIG.apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const createdRecord = await response.json();
+    await loadLeaderboards();
+    renderLeaderboards();
+    renderSummaryDifficultyLeaderboard(createdRecord && createdRecord._id ? createdRecord._id : null);
+  } catch (err) {
+    console.error("Error submitting score:", err);
+    setSummaryLeaderboardStatus("Couldn't reach the leaderboard — check your connection.");
+  }
+}
+
+async function loadLeaderboards() {
+  try {
+    const response = await fetch(RESTDB_CONFIG.dbUrl, {
+      headers: { "x-apikey": RESTDB_CONFIG.apiKey },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const records = await response.json();
+    
+    game.leaderboards = { easy: [], medium: [], hard: [] };
+    
+    for (const difficulty of ["easy", "medium", "hard"]) {
+      const scores = records
+        .filter(r => r.difficulty === difficulty)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+      game.leaderboards[difficulty] = scores;
+    }
+  } catch (err) {
+    console.error("Error loading leaderboards:", err);
+  }
+}
+
+function renderLeaderboards() {
+  const render = (containerId, difficultyKey) => {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const scores = game.leaderboards[difficultyKey] || [];
+    container.innerHTML = "";
+    
+    const title = document.createElement("h3");
+    title.textContent = DIFFICULTIES[difficultyKey].label;
+    container.appendChild(title);
+    
+    const list = document.createElement("ol");
+    const displayRows = getDisplayLeaderboardRows(scores);
+
+    displayRows.forEach((score) => {
+      const li = document.createElement("li");
+      if (score.isPlaceholder) li.classList.add("placeholder");
+
+      const name = document.createElement("span");
+      name.className = "leaderboard-name";
+      name.textContent = score.playerName;
+
+      const points = document.createElement("span");
+      points.className = "leaderboard-score";
+      points.textContent = String(score.score);
+
+      li.append(name, points);
+      list.appendChild(li);
+    });
+    container.appendChild(list);
+  };
+  
+  render("leaderboardEasy", "easy");
+  render("leaderboardMedium", "medium");
+  render("leaderboardHard", "hard");
 }
 
 function clearDifficultySelection() {
@@ -692,6 +883,7 @@ function selectDifficulty(radio) {
   for (const label of dom.difficultyGrid.querySelectorAll(".difficulty-btn")) {
     label.classList.toggle("active", label.querySelector("input") === radio);
   }
+  game.difficultyKey = radio.value;
   game.difficulty = DIFFICULTIES[radio.value];
   dom.startBtn.disabled = false;
   if (dom.introHint) dom.introHint.innerHTML = "Press <kbd>Space</kbd> to begin &middot; <kbd>1</kbd>&ndash;<kbd>3</kbd> to change difficulty";
@@ -701,6 +893,10 @@ function startGame() {
   game.score = 0;
   game.roundIndex = 0;
   game.playedIds = new Set();
+  if (dom.playerNameInput) {
+    game.playerName = dom.playerNameInput.value.trim().substring(0, 20);
+    saveStoredPlayerName(game.playerName);
+  }
   dom.introCard.classList.add("hidden");
   dom.summaryCard.classList.add("hidden");
   dom.gameCard.classList.remove("hidden");
@@ -759,6 +955,14 @@ function wireEvents() {
     if (game.difficulty) startGame();
   });
 
+  if (dom.playerNameInput) {
+    dom.playerNameInput.addEventListener("input", () => {
+      const nextName = dom.playerNameInput.value.substring(0, 20);
+      game.playerName = nextName;
+      saveStoredPlayerName(nextName);
+    });
+  }
+
   dom.nextHintBtn.addEventListener("click", revealNextClue);
 
   dom.answersGrid.addEventListener("click", (e) => {
@@ -784,9 +988,22 @@ function wireEvents() {
     const data = await res.json();
     game.episodes = data.episodes || [];
     game.clueFrequencies = computeClueFrequencies(game.episodes);
+    game.playerName = loadStoredPlayerName();
+    if (dom.playerNameInput) dom.playerNameInput.value = game.playerName;
     wireEvents();
     clearDifficultySelection();
     dom.introStatus.textContent = `${game.episodes.length} episodes loaded. Choose a difficulty to begin.`;
+    if (dom.leaderboardsStatus) dom.leaderboardsStatus.textContent = "Summoning Yog-Sothoth, please wait\u2026";
+    if (dom.leaderboardsGrid) dom.leaderboardsGrid.classList.add("hidden");
+    try {
+      await loadLeaderboards();
+      if (dom.leaderboardsStatus) dom.leaderboardsStatus.textContent = "";
+      if (dom.leaderboardsGrid) dom.leaderboardsGrid.classList.remove("hidden");
+      renderLeaderboards();
+    } catch (lbErr) {
+      console.error("Error loading leaderboards:", lbErr);
+      if (dom.leaderboardsStatus) dom.leaderboardsStatus.textContent = "Couldn\u2019t reach the leaderboard \u2014 check your connection.";
+    }
   } catch (err) {
     console.error(err);
     dom.introStatus.textContent = `Couldn't load episode data: ${err.message}`;

@@ -39,8 +39,24 @@
           </label>
         </div>
       </fieldset>
+
+      <div class="player-name-section">
+        <label for="playerNameInput">Your name on the leaderboards (optional, max 20 characters):</label>
+        <input type="text" id="playerNameInput" maxlength="20" placeholder="Enter your name">
+      </div>
+
       <button class="primary" id="startBtn" disabled>Start 10 Rounds</button>
       <p class="tiny intro-hint" id="introHint" aria-live="polite">Press <kbd>1</kbd>&ndash;<kbd>3</kbd> to select difficulty</p>
+
+      <div class="leaderboards">
+        <h2>Leaderboards</h2>
+        <p id="leaderboardsStatus" class="leaderboard-status"></p>
+        <div class="leaderboards-grid" id="leaderboardsGrid">
+          <div class="leaderboard" id="leaderboardEasy"></div>
+          <div class="leaderboard" id="leaderboardMedium"></div>
+          <div class="leaderboard" id="leaderboardHard"></div>
+        </div>
+      </div>
     </section>
 
     <section class="card game-card hidden" id="gameCard">
@@ -78,6 +94,10 @@
       <p class="eyebrow">Run complete</p>
       <h2 id="finalScore">Final score: 0</h2>
       <p id="finalStats"></p>
+      <section class="summary-leaderboard-wrap" aria-label="Difficulty leaderboard">
+        <div class="leaderboard" id="summaryLeaderboard"></div>
+        <p class="summary-congrats" id="summaryCongrats" aria-live="polite"></p>
+      </section>
       <button class="primary" id="playAgainBtn">Play again</button>
     </section>
   </main>
