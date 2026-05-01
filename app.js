@@ -339,14 +339,14 @@ function pickRound(episodePool, playedIds, frequencies, difficulty) {
 
     // First clue must narrow down to the correct answer alone.
     const byFreq = (a, b) => clueFrequency(a, frequencies) - clueFrequency(b, frequencies);
-    const uniqueFirst = cluePool
-      .filter(c => c.type !== "date" && wrongOptions.every(ep => !episodeHasClue(ep, c)))
-      .sort(byFreq);
+    const uniqueFirst = shuffle(
+      cluePool.filter(c => c.type !== "date" && wrongOptions.every(ep => !episodeHasClue(ep, c)))
+    ).sort(byFreq);
 
     if (!uniqueFirst.length) continue;
 
     const firstClue = uniqueFirst[0];
-    const rest = cluePool.filter(c => c.key !== firstClue.key).sort(byFreq);
+    const rest = shuffle(cluePool.filter(c => c.key !== firstClue.key)).sort(byFreq);
 
     if (rest.length < CLUES_PER_ROUND - 1) continue;
 
