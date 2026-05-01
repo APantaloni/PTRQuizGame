@@ -8,13 +8,24 @@ const ROUNDS_PER_GAME = 10;
 const CLUES_PER_ROUND = 4;
 const ROUND_COUNTDOWN_SECONDS = 4;
 
-// RestDB.io configuration
-const RESTDB_CONFIG = {
-  apiKey: "69f4776eb4b48c33a8b6a4e9",
-  dbUrl: "https://ptrquizgame-90eb.restdb.io/rest/scores",
+const EPISODE_DATA_URL = "./quiz_data.json";
+var EPISODE_FILTER_SOURCES = null;
+
+const SOURCES = {
+  all: { label: "All shows", filter: null },
+  castData: { label: "Ain't Slayed Nobody", filter: "CastData" },
+  castDataPTR: { label: "Push the Roll with Ross Bryant", filter: "CastDataPTR" },
+}
+
+// Supabase REST configuration
+const SUPABASE_CONFIG = {
+  projectUrl: "https://itbjcymfxueedycnrdru.supabase.co",
+  anonKey: "sb_publishable_cw_KSSXLoWhJtmYLDgDZsg_cCXHVmBE",
+  table: "scores",
 };
 
 const PLAYER_NAME_STORAGE_KEY = "ptrquizgame.playerName";
+const SOURCE_SELECTION_STORAGE_KEY = "ptrquizgame.sourceSelection";
 
 // Cap retries so round generation never loops forever on sparse datasets.
 const ROUND_BUILD_ATTEMPTS = 900;
@@ -368,6 +379,7 @@ const game = {
   phase:           PHASE.INTRO,
   episodes:        [],
   clueFrequencies: { warnings: {}, characters: {}, players: {} },
+  sourceKey:       "all",
   difficulty:      null,
   difficultyKey:   null,
   score:           0,
@@ -387,6 +399,7 @@ const dom = {
   introCard:      document.getElementById("introCard"),
   gameCard:       document.getElementById("gameCard"),
   summaryCard:    document.getElementById("summaryCard"),
+  sourceSelector: document.getElementById("sourceSelector"),
   difficultyGrid: document.getElementById("difficultyGrid"),
   startBtn:       document.getElementById("startBtn"),
   introStatus:    document.getElementById("introStatus"),
@@ -434,6 +447,24 @@ function loadStoredPlayerName() {
 function saveStoredPlayerName(name) {
   try {
     localStorage.setItem(PLAYER_NAME_STORAGE_KEY, String(name || "").slice(0, 20));
+  } catch {
+    // Ignore storage failures (private mode/quota/etc.) and continue normally.
+  }
+}
+
+function loadStoredSourceKey() {
+  try {
+    const sourceKey = String(localStorage.getItem(SOURCE_SELECTION_STORAGE_KEY) || "all");
+    return SOURCES[sourceKey] ? sourceKey : "all";
+  } catch {
+    return "all";
+  }
+}
+
+function saveStoredSourceKey(sourceKey) {
+  try {
+    const safeSourceKey = SOURCES[sourceKey] ? sourceKey : "all";
+    localStorage.setItem(SOURCE_SELECTION_STORAGE_KEY, safeSourceKey);
   } catch {
     // Ignore storage failures (private mode/quota/etc.) and continue normally.
   }
@@ -554,8 +585,31 @@ function getDisplayLeaderboardRows(scores) {
     const score = Number.isFinite(Number(row.score)) ? Number(row.score) : 0;
     // Standard competition ranking: rank = 1 + count of entries with strictly higher score
     const rank = scores.filter(r => Number(r.score) > score).length + 1;
-    return { id: row._id || null, playerName: String(row.playerName || "---").slice(0, 20), score, rank, isPlaceholder: false };
+    return { id: row.id || row._id || null, playerName: String(row.playerName || "---").slice(0, 20), score, rank, isPlaceholder: false };
   });
+}
+
+function getSupabaseBaseUrl() {
+  return `${SUPABASE_CONFIG.projectUrl}/rest/v1/${SUPABASE_CONFIG.table}`;
+}
+
+function getSupabaseHeaders(extra = {}) {
+  return {
+    "Content-Type": "application/json",
+    apikey: SUPABASE_CONFIG.anonKey,
+    Authorization: `Bearer ${SUPABASE_CONFIG.anonKey}`,
+    ...extra,
+  };
+}
+
+function buildLeaderboardUrlForDifficulty(difficulty) {
+  const params = new URLSearchParams();
+  params.set("select", "id,playerName,score,difficulty,source,date");
+  params.set("difficulty", `eq.${difficulty}`);
+  if (game.sourceKey !== "all") params.set("source", `eq.${game.sourceKey}`);
+  params.set("order", "score.desc,date.asc");
+  params.set("limit", "10");
+  return `${getSupabaseBaseUrl()}?${params.toString()}`;
 }
 
 function setSummaryLeaderboardStatus(message) {
@@ -566,6 +620,59 @@ function setSummaryLeaderboardStatus(message) {
   p.textContent = message;
   dom.summaryLeaderboard.appendChild(p);
   if (dom.summaryCongrats) dom.summaryCongrats.textContent = "";
+}
+
+function getCurrentSourceConfig() {
+  return SOURCES[game.sourceKey] || SOURCES.all;
+}
+
+function refreshIntroStatus() {
+  const sourceLabel = getCurrentSourceConfig().label;
+  dom.introStatus.textContent = `${game.episodes.length} episodes loaded (${sourceLabel}). Choose a difficulty to begin.`;
+}
+
+async function reloadEpisodesForSource() {
+  const res = await fetch(EPISODE_DATA_URL, { cache: "no-cache" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const data = await res.json();
+  const sourceConfig = getCurrentSourceConfig();
+  EPISODE_FILTER_SOURCES = sourceConfig.filter ? [sourceConfig.filter] : null;
+
+  game.episodes = data.episodes || [];
+  if (EPISODE_FILTER_SOURCES) {
+    game.episodes = game.episodes.filter(ep => EPISODE_FILTER_SOURCES.includes(ep.source));
+  }
+  game.clueFrequencies = computeClueFrequencies(game.episodes);
+}
+
+async function refreshLeaderboardsForSource() {
+  if (dom.leaderboardsStatus) dom.leaderboardsStatus.textContent = "Summoning Yog-Sothoth, please wait...";
+  if (dom.leaderboardsGrid) dom.leaderboardsGrid.classList.add("hidden");
+  if (dom.leaderboardEasy) dom.leaderboardEasy.innerHTML = "";
+  if (dom.leaderboardMedium) dom.leaderboardMedium.innerHTML = "";
+  if (dom.leaderboardHard) dom.leaderboardHard.innerHTML = "";
+
+  try {
+    await loadLeaderboards();
+    renderLeaderboards();
+    if (dom.leaderboardsStatus) dom.leaderboardsStatus.textContent = "";
+    if (dom.leaderboardsGrid) dom.leaderboardsGrid.classList.remove("hidden");
+  } catch (err) {
+    console.error("Error loading leaderboards:", err);
+    if (dom.leaderboardsStatus) dom.leaderboardsStatus.textContent = "Couldn't reach the leaderboard - check your connection.";
+  }
+}
+
+async function applySourceSelection(sourceKey) {
+  game.sourceKey = SOURCES[sourceKey] ? sourceKey : "all";
+  saveStoredSourceKey(game.sourceKey);
+  if (dom.sourceSelector) dom.sourceSelector.value = game.sourceKey;
+
+  clearDifficultySelection();
+  await reloadEpisodesForSource();
+  refreshIntroStatus();
+  await refreshLeaderboardsForSource();
 }
 
 function renderSummaryDifficultyLeaderboard(newEntryId = null) {
@@ -604,7 +711,7 @@ function renderSummaryDifficultyLeaderboard(newEntryId = null) {
   dom.summaryLeaderboard.appendChild(list);
 
   if (!dom.summaryCongrats) return;
-  const madeLeaderboard = Boolean(newEntryId) && scores.some((entry) => entry && entry._id === newEntryId);
+  const madeLeaderboard = Boolean(newEntryId) && scores.some((entry) => entry && String(entry.id || entry._id) === String(newEntryId));
   dom.summaryCongrats.textContent = madeLeaderboard
     ? "Congratulations! Your new score made the leaderboard!"
     : "";
@@ -783,23 +890,22 @@ async function submitScore() {
     playerName: game.playerName.substring(0, 20),
     score: game.score,
     difficulty: Object.keys(DIFFICULTIES).find(k => DIFFICULTIES[k] === game.difficulty) || "easy",
+    source: game.sourceKey,
     date: new Date().toISOString(),
   };
   
   try {
-    const response = await fetch(RESTDB_CONFIG.dbUrl, {
+    const response = await fetch(getSupabaseBaseUrl(), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-apikey": RESTDB_CONFIG.apiKey,
-      },
+      headers: getSupabaseHeaders({ Prefer: "return=representation" }),
       body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const createdRecord = await response.json();
+    const createdRecordJson = await response.json();
+    const createdRecord = Array.isArray(createdRecordJson) ? createdRecordJson[0] : createdRecordJson;
     await loadLeaderboards();
     renderLeaderboards();
-    renderSummaryDifficultyLeaderboard(createdRecord && createdRecord._id ? createdRecord._id : null);
+    renderSummaryDifficultyLeaderboard(createdRecord && (createdRecord.id || createdRecord._id) ? (createdRecord.id || createdRecord._id) : null);
   } catch (err) {
     console.error("Error submitting score:", err);
     setSummaryLeaderboardStatus("Couldn't reach the leaderboard — check your connection.");
@@ -807,24 +913,15 @@ async function submitScore() {
 }
 
 async function loadLeaderboards() {
-  try {
-    const response = await fetch(RESTDB_CONFIG.dbUrl, {
-      headers: { "x-apikey": RESTDB_CONFIG.apiKey },
+  game.leaderboards = { easy: [], medium: [], hard: [] };
+
+  for (const difficulty of ["easy", "medium", "hard"]) {
+    const response = await fetch(buildLeaderboardUrlForDifficulty(difficulty), {
+      headers: getSupabaseHeaders(),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const records = await response.json();
-    
-    game.leaderboards = { easy: [], medium: [], hard: [] };
-    
-    for (const difficulty of ["easy", "medium", "hard"]) {
-      const scores = records
-        .filter(r => r.difficulty === difficulty)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 10);
-      game.leaderboards[difficulty] = scores;
-    }
-  } catch (err) {
-    console.error("Error loading leaderboards:", err);
+    const scores = await response.json();
+    game.leaderboards[difficulty] = scores;
   }
 }
 
@@ -946,6 +1043,18 @@ document.addEventListener("keydown", (e) => {
 });
 
 function wireEvents() {
+  if (dom.sourceSelector) {
+    dom.sourceSelector.addEventListener("change", async (e) => {
+      const nextSource = e.target && e.target.value ? e.target.value : "all";
+      try {
+        await applySourceSelection(nextSource);
+      } catch (err) {
+        console.error("Error applying source selection:", err);
+        dom.introStatus.textContent = `Couldn't load episode data: ${err.message}`;
+      }
+    });
+  }
+
   dom.difficultyGrid.addEventListener("click", (e) => {
     const label = e.target.closest(".difficulty-btn");
     if (!label) return;
@@ -988,27 +1097,10 @@ function wireEvents() {
 
 (async function init() {
   try {
-    const res = await fetch("./quiz_data.json", { cache: "no-cache" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    game.episodes = data.episodes || [];
-    game.clueFrequencies = computeClueFrequencies(game.episodes);
     game.playerName = loadStoredPlayerName();
     if (dom.playerNameInput) dom.playerNameInput.value = game.playerName;
     wireEvents();
-    clearDifficultySelection();
-    dom.introStatus.textContent = `${game.episodes.length} episodes loaded. Choose a difficulty to begin.`;
-    if (dom.leaderboardsStatus) dom.leaderboardsStatus.textContent = "Summoning Yog-Sothoth, please wait\u2026";
-    if (dom.leaderboardsGrid) dom.leaderboardsGrid.classList.add("hidden");
-    try {
-      await loadLeaderboards();
-      if (dom.leaderboardsStatus) dom.leaderboardsStatus.textContent = "";
-      if (dom.leaderboardsGrid) dom.leaderboardsGrid.classList.remove("hidden");
-      renderLeaderboards();
-    } catch (lbErr) {
-      console.error("Error loading leaderboards:", lbErr);
-      if (dom.leaderboardsStatus) dom.leaderboardsStatus.textContent = "Couldn\u2019t reach the leaderboard \u2014 check your connection.";
-    }
+    await applySourceSelection(loadStoredSourceKey());
   } catch (err) {
     console.error(err);
     dom.introStatus.textContent = `Couldn't load episode data: ${err.message}`;
